@@ -20,6 +20,7 @@ pub struct Mp4Writer<W> {
     mdat_pos: u64,
     timescale: u32,
     duration: u64,
+    moov_raw_data: Option<Vec<u8>>,
 }
 
 impl<W> Mp4Writer<W> {
@@ -81,6 +82,7 @@ impl<W: Write + Seek> Mp4Writer<W> {
             mdat_pos,
             timescale,
             duration,
+            moov_raw_data: None,
         })
     }
 
@@ -125,6 +127,15 @@ impl<W: Write + Seek> Mp4Writer<W> {
         Ok(())
     }
 
+    /// Set raw data which will be added to the `moov` box
+    ///
+    /// This allows additional metadata or other information to be saved to the
+    /// MP4 file. This requires the data to already be serialized into one or
+    /// more MP4 boxes.
+    pub fn set_moov_raw_data(&mut self, raw_data: Option<Vec<u8>>) {
+        self.moov_raw_data = raw_data;
+    }
+
     pub fn write_end(&mut self) -> Result<()> {
         let mut moov = MoovBox::default();
 
@@ -138,6 +149,9 @@ impl<W: Write + Seek> Mp4Writer<W> {
         if moov.mvhd.duration > (u32::MAX as u64) {
             moov.mvhd.version = 1
         }
+
+        moov.raw_data = self.moov_raw_data.clone();
+
         moov.write_box(&mut self.writer)?;
         Ok(())
     }

@@ -16,6 +16,9 @@ pub struct MoovBox {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub udta: Option<UdtaBox>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) raw_data: Option<Vec<u8>>,
 }
 
 impl MoovBox {
@@ -27,6 +30,9 @@ impl MoovBox {
         let mut size = HEADER_SIZE + self.mvhd.box_size();
         for trak in self.traks.iter() {
             size += trak.box_size();
+        }
+        if let Some(raw_data) = &self.raw_data {
+            size += raw_data.len() as u64;
         }
         size
     }
@@ -101,6 +107,7 @@ impl<R: Read + Seek> ReadBox<&mut R> for MoovBox {
             udta,
             mvex,
             traks,
+            raw_data: None,
         })
     }
 }
@@ -113,6 +120,10 @@ impl<W: Write> WriteBox<&mut W> for MoovBox {
         self.mvhd.write_box(writer)?;
         for trak in self.traks.iter() {
             trak.write_box(writer)?;
+        }
+
+        if let Some(raw_data) = &self.raw_data {
+            writer.write_all(raw_data)?;
         }
         Ok(0)
     }
