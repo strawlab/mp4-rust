@@ -490,12 +490,12 @@ impl Mp4Track {
 
             let first_sample_in_chunk = sample_id - (sample_id - first_sample) % samples_per_chunk;
 
-            let mut sample_offset = 0;
+            let mut sample_offset: u64 = 0;
             for i in first_sample_in_chunk..sample_id {
-                sample_offset += self.sample_size(i)?;
+                sample_offset += self.sample_size(i)? as u64;
             }
 
-            Ok(chunk_offset + sample_offset as u64)
+            Ok(chunk_offset + sample_offset)
         }
     }
 
