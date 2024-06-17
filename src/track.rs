@@ -89,6 +89,38 @@ impl From<Vp9Config> for TrackConfig {
     }
 }
 
+fn sample_times(trak: &TrakBox) -> Result<Vec<(u64, u32)>> {
+    let stts = &trak.mdia.minf.stbl.stts;
+
+    let mut sample_count: u32 = 1;
+    let mut elapsed = 0;
+
+    let mut result = Vec::new();
+
+    let mut sample_id = 1;
+
+    for entry in stts.entries.iter() {
+        let new_sample_count =
+            sample_count
+                .checked_add(entry.sample_count)
+                .ok_or(Error::InvalidData(
+                    "attempt to sum stts entries sample_count with overflow",
+                ))?;
+
+        while sample_id < new_sample_count {
+            let start_time =
+                (sample_id - sample_count) as u64 * entry.sample_delta as u64 + elapsed;
+            sample_id += 1;
+            result.push((start_time, entry.sample_delta));
+        }
+
+        sample_count = new_sample_count;
+        elapsed += entry.sample_count as u64 * entry.sample_delta as u64;
+    }
+
+    Ok(result)
+}
+
 #[derive(Debug)]
 pub struct Mp4Track {
     pub trak: TrakBox,
@@ -97,16 +129,20 @@ pub struct Mp4Track {
 
     // Fragmented Tracks Defaults.
     pub default_sample_duration: u32,
+
+    sample_time_cache: Vec<(u64, u32)>,
 }
 
 impl Mp4Track {
     pub(crate) fn from(trak: &TrakBox) -> Self {
         let trak = trak.clone();
+        let sample_time_cache = sample_times(&trak).unwrap();
         Self {
             trak,
             trafs: Vec::new(),
             moof_offsets: Vec::new(),
             default_sample_duration: 0,
+            sample_time_cache,
         }
     }
 
@@ -499,7 +535,7 @@ impl Mp4Track {
         }
     }
 
-    fn sample_time(&self, sample_id: u32) -> Result<(u64, u32)> {
+    pub(crate) fn sample_time(&self, sample_id: u32) -> Result<(u64, u32)> {
         if !self.trafs.is_empty() {
             let mut base_start_time = 0;
             let mut default_sample_duration = self.default_sample_duration;
@@ -527,33 +563,7 @@ impl Mp4Track {
             let start_offset = ((sample_id - 1) * default_sample_duration) as u64;
             Ok((base_start_time + start_offset, default_sample_duration))
         } else {
-            let stts = &self.trak.mdia.minf.stbl.stts;
-
-            let mut sample_count: u32 = 1;
-            let mut elapsed = 0;
-
-            for entry in stts.entries.iter() {
-                let new_sample_count =
-                    sample_count
-                        .checked_add(entry.sample_count)
-                        .ok_or(Error::InvalidData(
-                            "attempt to sum stts entries sample_count with overflow",
-                        ))?;
-                if sample_id < new_sample_count {
-                    let start_time =
-                        (sample_id - sample_count) as u64 * entry.sample_delta as u64 + elapsed;
-                    return Ok((start_time, entry.sample_delta));
-                }
-
-                sample_count = new_sample_count;
-                elapsed += entry.sample_count as u64 * entry.sample_delta as u64;
-            }
-
-            Err(Error::EntryInStblNotFound(
-                self.track_id(),
-                BoxType::SttsBox,
-                sample_id,
-            ))
+            Ok(self.sample_time_cache[sample_id as usize - 1])
         }
     }
 

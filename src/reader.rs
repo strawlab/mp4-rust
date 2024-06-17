@@ -263,6 +263,14 @@ impl<R: Read + Seek> Mp4Reader<R> {
         }
     }
 
+    pub fn sample_time_duration(&mut self, track_id: u32, sample_id: u32) -> Result<(u64, u32)> {
+        if let Some(track) = self.tracks.get(&track_id) {
+            track.sample_time(sample_id)
+        } else {
+            Err(Error::TrakNotFound(track_id))
+        }
+    }
+
     pub fn sample_offset(&mut self, track_id: u32, sample_id: u32) -> Result<u64> {
         if let Some(track) = self.tracks.get(&track_id) {
             track.sample_offset(sample_id)
