@@ -92,6 +92,23 @@ impl<W: Write + Seek> Mp4Writer<W> {
         Ok(())
     }
 
+    /// Attach an edit list to a track, e.g. to trim a decode-only lead-in
+    /// introduced by frame reordering (B-frames) so playback starts at
+    /// presentation timestamp zero. Call after [`Mp4Writer::add_track`] and
+    /// before [`Mp4Writer::write_end`].
+    pub fn set_edit_list(&mut self, track_id: u32, edit_list: Vec<EditListEntry>) -> Result<()> {
+        if track_id == 0 {
+            return Err(Error::TrakNotFound(track_id));
+        }
+
+        if let Some(track) = self.tracks.get_mut(track_id as usize - 1) {
+            track.set_edit_list(edit_list);
+            Ok(())
+        } else {
+            Err(Error::TrakNotFound(track_id))
+        }
+    }
+
     fn update_durations(&mut self, track_dur: u64) {
         if track_dur > self.duration {
             self.duration = track_dur;
@@ -134,7 +151,8 @@ impl<W: Write + Seek> Mp4Writer<W> {
         let mut moov = MoovBox::default();
 
         for track in self.tracks.iter_mut() {
-            moov.traks.push(track.write_end(&mut self.writer)?);
+            moov.traks
+                .push(track.write_end(&mut self.writer, self.timescale)?);
         }
         self.update_mdat_size()?;
 

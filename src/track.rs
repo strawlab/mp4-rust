@@ -4,6 +4,8 @@ use std::convert::TryFrom;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::time::Duration;
 
+use crate::mp4box::edts::EdtsBox;
+use crate::mp4box::elst::{ElstBox, ElstEntry};
 use crate::mp4box::traf::TrafBox;
 use crate::mp4box::trak::TrakBox;
 use crate::mp4box::trun::TrunBox;
@@ -13,6 +15,26 @@ use crate::mp4box::{
     vmhd::VmhdBox, vp09::Vp09Box,
 };
 use crate::*;
+
+/// A single edit list entry, describing how a segment of a track's media
+/// timeline maps onto the presentation (movie) timeline.
+///
+/// `segment_duration` is counted in the *movie* timescale (`mvhd`) while
+/// `media_time` is counted in this *track's media* timescale (`mdhd`) — the
+/// two can differ. Both are expressed here as [`Duration`]s rather than raw
+/// timescale ticks; the writer knows both timescales and converts internally
+/// when the track is finalized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditListEntry {
+    pub segment_duration: Duration,
+    pub media_time: Duration,
+    pub media_rate: u16,
+    pub media_rate_fraction: u16,
+}
+
+fn duration_to_ticks(duration: Duration, timescale: u32) -> u64 {
+    (duration.as_nanos() * timescale as u128 / 1_000_000_000) as u64
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackConfig {
@@ -648,6 +670,8 @@ pub(crate) struct Mp4TrackWriter {
 
     samples_per_chunk: u32,
     duration_per_chunk: u32,
+
+    edit_list: Vec<EditListEntry>,
 }
 
 impl Mp4TrackWriter {
@@ -704,6 +728,10 @@ impl Mp4TrackWriter {
             duration_per_chunk: config.timescale, // 1 second
             ..Self::default()
         })
+    }
+
+    pub(crate) fn set_edit_list(&mut self, edit_list: Vec<EditListEntry>) {
+        self.edit_list = edit_list;
     }
 
     fn update_sample_sizes(&mut self, size: u32) {
@@ -906,7 +934,11 @@ impl Mp4TrackWriter {
         }
     }
 
-    pub(crate) fn write_end<W: Write + Seek>(&mut self, writer: &mut W) -> Result<TrakBox> {
+    pub(crate) fn write_end<W: Write + Seek>(
+        &mut self,
+        writer: &mut W,
+        movie_timescale: u32,
+    ) -> Result<TrakBox> {
         self.write_chunk(writer)?;
 
         let max_sample_size = self.max_sample_size();
@@ -921,6 +953,27 @@ impl Mp4TrackWriter {
         if let Ok(stco) = StcoBox::try_from(self.trak.mdia.minf.stbl.co64.as_ref().unwrap()) {
             self.trak.mdia.minf.stbl.stco = Some(stco);
             self.trak.mdia.minf.stbl.co64 = None;
+        }
+
+        if !self.edit_list.is_empty() {
+            let media_timescale = self.trak.mdia.mdhd.timescale;
+            let entries = self
+                .edit_list
+                .iter()
+                .map(|entry| ElstEntry {
+                    segment_duration: duration_to_ticks(entry.segment_duration, movie_timescale),
+                    media_time: duration_to_ticks(entry.media_time, media_timescale) as i64,
+                    media_rate: entry.media_rate,
+                    media_rate_fraction: entry.media_rate_fraction,
+                })
+                .collect();
+            self.trak.edts = Some(EdtsBox {
+                elst: Some(ElstBox {
+                    version: 0,
+                    flags: 0,
+                    entries,
+                }),
+            });
         }
 
         Ok(self.trak.clone())

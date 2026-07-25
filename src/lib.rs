@@ -80,7 +80,7 @@ mod mp4box;
 pub use mp4box::*;
 
 mod track;
-pub use track::{Mp4Track, TrackConfig};
+pub use track::{EditListEntry, Mp4Track, TrackConfig};
 
 mod reader;
 pub use reader::Mp4Reader;
