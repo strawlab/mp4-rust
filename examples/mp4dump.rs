@@ -103,6 +103,9 @@ fn get_boxes(file: File) -> Result<Vec<Box>> {
         if let Some(ref ctts) = &stbl.ctts {
             boxes.push(build_box(ctts));
         }
+        if let Some(ref cslg) = &stbl.cslg {
+            boxes.push(build_box(cslg));
+        }
         if let Some(ref stss) = &stbl.stss {
             boxes.push(build_box(stss));
         }

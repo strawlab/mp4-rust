@@ -64,6 +64,7 @@ use crate::*;
 
 pub(crate) mod avc1;
 pub(crate) mod co64;
+pub(crate) mod cslg;
 pub(crate) mod ctts;
 pub(crate) mod data;
 pub(crate) mod dinf;
@@ -108,6 +109,7 @@ pub(crate) mod vpcc;
 
 pub use avc1::Avc1Box;
 pub use co64::Co64Box;
+pub use cslg::CslgBox;
 pub use ctts::CttsBox;
 pub use data::DataBox;
 pub use dinf::DinfBox;
@@ -208,6 +210,7 @@ boxtype! {
     StsdBox => 0x73747364,
     SttsBox => 0x73747473,
     CttsBox => 0x63747473,
+    CslgBox => 0x63736c67,
     StssBox => 0x73747373,
     StscBox => 0x73747363,
     StszBox => 0x7374737A,
