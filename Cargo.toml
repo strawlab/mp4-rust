@@ -13,7 +13,7 @@ license = "MIT"
 include = ["src", "benches", "Cargo.toml", "README", "LICENSE"]
 
 [dependencies]
-thiserror = "^1.0"
+thiserror = "2.0.21"
 byteorder = "1"
 bytes = "1.1.0"
 num-rational = { version = "0.4.0", features = ["serde"] }
